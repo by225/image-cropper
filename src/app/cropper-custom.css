@@ -1,0 +1,60 @@
+/* cropper-custom.css */
+
+/* Corner handles larger */
+.cropper-point.point-ne,
+.cropper-point.point-nw,
+.cropper-point.point-se,
+.cropper-point.point-sw {
+  width: 12px !important;
+  height: 12px !important;
+  opacity: 0.9 !important;
+  background-color: #2B6CB0 !important;
+}
+
+/* Side handles a little larger */
+.cropper-point.point-n,
+.cropper-point.point-e,
+.cropper-point.point-s,
+.cropper-point.point-w {
+  width: 11px !important;
+  height: 11px !important;
+  opacity: 0.9 !important;
+  background-color: #2B6CB0 !important;
+}
+
+/* Put handles on the outside of their borders */
+.cropper-point.point-n {
+  margin-top: -8px !important;
+}
+.cropper-point.point-s {
+  margin-bottom: -8px !important;
+}
+.cropper-point.point-e {
+  margin-right: -8px !important;
+}
+.cropper-point.point-w {
+  margin-left: -8px !important;
+}
+
+.cropper-point.point-ne {
+  margin-top: -9px !important;
+  margin-right: -9px !important;
+}
+.cropper-point.point-nw {
+  margin-top: -9px !important;
+  margin-left: -9px !important;
+}
+.cropper-point.point-se {
+  margin-bottom: -9px !important;
+  margin-right: -9px !important;
+}
+.cropper-point.point-sw {
+  margin-bottom: -9px !important;
+  margin-left: -9px !important;
+}
+
+/* Keep the hover effect */
+.cropper-point:hover {
+  opacity: 1 !important;
+  box-shadow: 0 0 5px rgba(43, 108, 176, 0.5) !important;
+}
