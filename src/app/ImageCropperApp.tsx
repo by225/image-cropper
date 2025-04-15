@@ -487,13 +487,6 @@ export const ImageCropperApp: React.FC = () => {
     [activeCropSettings.aspectRatio]
   );
 
-  const handleInputComplete = useCallback(
-    (key: keyof CropSettings, value: string) => {
-      handleNumericChange(key, value, true);
-    },
-    [handleNumericChange]
-  );
-
   const handleXChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       handleNumericChange('x', e.target.value, false);
@@ -551,7 +544,7 @@ export const ImageCropperApp: React.FC = () => {
       }
       updateCropSettings(e.detail);
     },
-    [updateCropSettings, isClosing]
+    [updateCropSettings, isClosing, activeCropSettings]
   );
 
   // Opens crop modal with settings based on mode:
