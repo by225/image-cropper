@@ -7,7 +7,7 @@ import { Box, Flex, useDisclosure, VStack, Text, Select, useToast,
 } from '@chakra-ui/react';
 import { ReactCropperElement } from 'react-cropper';
 import { CropSettings, ImageData, ToastMessage, ShowSaveFilePicker } from './types';
-import { TEXT, ACCEPTED_TYPES, TIMING, MAX_FILE_SIZE } from './constants';
+import { TEXT, ACCEPTED_TYPES, TIMING, MAX_FILE_SIZE, CROP_SIZE } from './constants';
 import { ImageGrid } from './ImageGrid';
 import { CropModal } from './CropModal';
 
@@ -34,13 +34,9 @@ export const ImageCropperApp: React.FC = () => {
   const [saveOnCancel, setSaveOnCancel] = useState(false);
   const [initialCropSettings, setInitialCropSettings] = useState<CropSettings | null>(null);
   const [isClosing, setIsClosing] = useState(false);
-  const { isOpen, onOpen, onClose } = useDisclosure();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const cropperRef = useRef<ReactCropperElement>(null);
-  const processingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const objectUrlsToCleanup = useRef<string[]>([]);
-  const { colorMode, toggleColorMode } = useColorMode();
 
+  const { isOpen, onOpen, onClose } = useDisclosure();
+  const { colorMode, toggleColorMode } = useColorMode();
   const toast = useToast({
     position: 'bottom',
     duration: 6000,
@@ -48,6 +44,21 @@ export const ImageCropperApp: React.FC = () => {
     variant: 'solid',
     status: 'warning'
   });
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cropperRef = useRef<ReactCropperElement>(null);
+  const processingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const objectUrlsToCleanup = useRef<string[]>([]);
+
+  const existingFilenames = useMemo(() => new Set(images.map((img) => img.file.name)), [images]);
+
+  const addUrlForCleanup = (url: string) => {
+    objectUrlsToCleanup.current.push(url);
+  };
+
+  const removeUrlFromCleanup = (url: string) => {
+    objectUrlsToCleanup.current = objectUrlsToCleanup.current.filter((u) => u !== url);
+  };
 
   const createToastMessage = useCallback(
     (
@@ -133,16 +144,6 @@ export const ImageCropperApp: React.FC = () => {
     [toast]
   );
 
-  const existingFilenames = useMemo(() => new Set(images.map((img) => img.file.name)), [images]);
-
-  const addUrlForCleanup = (url: string) => {
-    objectUrlsToCleanup.current.push(url);
-  };
-
-  const removeUrlFromCleanup = (url: string) => {
-    objectUrlsToCleanup.current = objectUrlsToCleanup.current.filter((u) => u !== url);
-  };
-
   const validateImage = useCallback((file: File): Promise<boolean> => {
     return new Promise((resolve) => {
       try {
@@ -163,10 +164,10 @@ export const ImageCropperApp: React.FC = () => {
           if (
             img.width === 0 ||
             img.height === 0 ||
-            img.width > 16384 ||
-            img.height > 16384 ||
-            img.width < 16 ||
-            img.height < 16
+            img.width > CROP_SIZE.MAX ||
+            img.height > CROP_SIZE.MAX ||
+            img.width < CROP_SIZE.MIN ||
+            img.height < CROP_SIZE.MIN
           ) {
             resolve(false);
             return;
@@ -344,6 +345,74 @@ export const ImageCropperApp: React.FC = () => {
     [images, toast, isProcessing, validateImage, existingFilenames, createToastMessage]
   );
 
+  const updateCropSettings = useCallback(
+    (data: Cropper.Data) => {
+      const newCropSettings: CropSettings = {
+        x: data.x,
+        y: data.y,
+        width: data.width,
+        height: data.height,
+        aspectRatio: activeCropSettings.aspectRatio
+      };
+
+      setActiveCropSettings(newCropSettings);
+
+      if (isPerImageCrop && currentImage) {
+        setImages((prev) =>
+          prev.map((img) =>
+            img.id === currentImage.id ? { ...img, cropSettings: newCropSettings } : img
+          )
+        );
+      } else {
+        setGlobalCropSettings(newCropSettings);
+      }
+    },
+    [activeCropSettings.aspectRatio, currentImage, isPerImageCrop]
+  );
+
+  const getAspectRatioFromSelection = useCallback(
+    (value: string): number => {
+      switch (value) {
+        case TEXT.MODAL.ASPECT_RATIOS.ORIGINAL.VALUE:
+          return originalDimensions ? originalDimensions.width / originalDimensions.height : 0;
+        case TEXT.MODAL.ASPECT_RATIOS.SQUARE.VALUE:
+          return 1;
+        default:
+          return 0;
+      }
+    },
+    [originalDimensions]
+  );
+
+  const getSelectionFromAspectRatio = (
+    ratio: number,
+    originalDimensions: { width: number; height: number } | null
+  ): string => {
+    if (ratio === 1) {
+      return TEXT.MODAL.ASPECT_RATIOS.SQUARE.VALUE;
+    } else if (
+      originalDimensions &&
+      Math.abs(ratio - originalDimensions.width / originalDimensions.height) < 0.0001
+    ) {
+      return TEXT.MODAL.ASPECT_RATIOS.ORIGINAL.VALUE;
+    }
+    return TEXT.MODAL.ASPECT_RATIOS.FREE.VALUE;
+  };
+
+  const getFileExtension = (filename: string): string => {
+    return filename.slice(((filename.lastIndexOf('.') - 1) >>> 0) + 2).toLowerCase();
+  };
+
+  const formatNumber = (num: number): string => {
+    const rounded = Math.round(num);
+    return rounded === 0 ? '0' : rounded.toString();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    processFiles(files);
+  };
+
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
@@ -353,10 +422,137 @@ export const ImageCropperApp: React.FC = () => {
     [processFiles]
   );
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    processFiles(files);
-  };
+  const handleFileInputClick = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const handlePageClick = useCallback(() => {
+    toast.closeAll();
+  }, [toast]);
+
+  const handleNumericChange = useCallback(
+    (key: keyof CropSettings, value: string, isComplete: boolean) => {
+      const cropper = cropperRef.current?.cropper;
+      if (!cropper) return;
+
+      let cropMax = CROP_SIZE.MAX;
+      if (['x', 'y'].includes(key)) {
+        cropMax = CROP_SIZE.MAX - CROP_SIZE.MIN;
+      }
+      let num = Math.min(Number(value), cropMax);
+
+      // For incomplete changes, just update the current input
+      if (!isComplete) {
+        setActiveCropSettings((prev) => ({
+          ...prev,
+          [key]: num
+        }));
+        return;
+      }
+
+      const currentData = cropper.getData();
+      const canvasData = cropper.getCanvasData();
+      const imageWidth = canvasData.naturalWidth;
+      const imageHeight = canvasData.naturalHeight;
+
+      const newData = { ...currentData };
+
+      switch (key) {
+        case 'x':
+          newData.x = Math.max(0, Math.min(imageWidth - currentData.width, num));
+          break;
+        case 'y':
+          newData.y = Math.max(0, Math.min(imageHeight - currentData.height, num));
+          break;
+        case 'width':
+          newData.width = Math.max(CROP_SIZE.MIN, Math.min(imageWidth - currentData.x, num));
+          break;
+        case 'height':
+          newData.height = Math.max(CROP_SIZE.MIN, Math.min(imageHeight - currentData.y, num));
+          break;
+      }
+
+      cropper.setData(newData);
+
+      const finalData = cropper.getData();
+
+      setActiveCropSettings({
+        x: Math.round(finalData.x),
+        y: Math.round(finalData.y),
+        width: Math.round(finalData.width),
+        height: Math.round(finalData.height),
+        aspectRatio: activeCropSettings.aspectRatio
+      });
+    },
+    [activeCropSettings.aspectRatio]
+  );
+
+  const handleInputComplete = useCallback(
+    (key: keyof CropSettings, value: string) => {
+      handleNumericChange(key, value, true);
+    },
+    [handleNumericChange]
+  );
+
+  const handleXChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      handleNumericChange('x', e.target.value, false);
+    },
+    [handleNumericChange]
+  );
+
+  const handleYChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      handleNumericChange('y', e.target.value, false);
+    },
+    [handleNumericChange]
+  );
+
+  const handleWidthChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      handleNumericChange('width', e.target.value, false);
+    },
+    [handleNumericChange]
+  );
+
+  const handleHeightChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      handleNumericChange('height', e.target.value, false);
+    },
+    [handleNumericChange]
+  );
+
+  const handleCropMemoryChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    setIsPerImageCrop(e.target.value === 'per-image');
+  }, []);
+
+  const handleCropEvent = useCallback(
+    (e: Cropper.CropEvent) => {
+      if (isClosing) return;
+      const cropper = cropperRef.current?.cropper;
+      if (!cropper) return;
+      const rx = Math.round(e.detail.x);
+      const ry = Math.round(e.detail.y);
+      const rw = Math.round(e.detail.width);
+      const rh = Math.round(e.detail.height);
+      if (
+        activeCropSettings.x !== rx ||
+        activeCropSettings.y !== ry ||
+        activeCropSettings.width !== rw ||
+        activeCropSettings.height !== rh
+      ) {
+        setActiveCropSettings({
+          x: rx,
+          y: ry,
+          width: rw,
+          height: rh,
+          aspectRatio: activeCropSettings.aspectRatio
+        });
+      }
+      updateCropSettings(e.detail);
+    },
+    [updateCropSettings, isClosing]
+  );
 
   // Opens crop modal with settings based on mode:
   // Per-Image: image settings -> default
@@ -604,31 +800,6 @@ export const ImageCropperApp: React.FC = () => {
     onClose();
   };
 
-  const updateCropSettings = useCallback(
-    (data: Cropper.Data) => {
-      const newCropSettings: CropSettings = {
-        x: data.x,
-        y: data.y,
-        width: data.width,
-        height: data.height,
-        aspectRatio: activeCropSettings.aspectRatio
-      };
-
-      setActiveCropSettings(newCropSettings);
-
-      if (isPerImageCrop && currentImage) {
-        setImages((prev) =>
-          prev.map((img) =>
-            img.id === currentImage.id ? { ...img, cropSettings: newCropSettings } : img
-          )
-        );
-      } else {
-        setGlobalCropSettings(newCropSettings);
-      }
-    },
-    [activeCropSettings.aspectRatio, currentImage, isPerImageCrop]
-  );
-
   // Converts aspect ratio selection to numeric value and updates cropper
   const handleAspectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const value = e.target.value;
@@ -670,41 +841,6 @@ export const ImageCropperApp: React.FC = () => {
     }
   };
 
-  const getAspectRatioFromSelection = useCallback(
-    (value: string): number => {
-      switch (value) {
-        case TEXT.MODAL.ASPECT_RATIOS.ORIGINAL.VALUE:
-          return originalDimensions ? originalDimensions.width / originalDimensions.height : 0;
-        case TEXT.MODAL.ASPECT_RATIOS.SQUARE.VALUE:
-          return 1;
-        default:
-          return 0;
-      }
-    },
-    [originalDimensions]
-  );
-
-  // Updates numeric crop settings and maintains aspect ratio if set
-  const handleNumericChange = useCallback(
-    (key: keyof CropSettings, value: string) => {
-      const num = Math.max(0, Number(value));
-      setActiveCropSettings((prev) => {
-        const newCropSettings = { ...prev, [key]: num };
-        const aspectRatio = getAspectRatioFromSelection(selectedAspectRatio);
-        if (aspectRatio && (key === 'width' || key === 'height')) {
-          const otherKey = key === 'width' ? 'height' : 'width';
-          newCropSettings[otherKey] = num / aspectRatio;
-        }
-        const cropper = cropperRef.current?.cropper;
-        if (cropper) {
-          cropper.setData(newCropSettings);
-        }
-        return newCropSettings;
-      });
-    },
-    [getAspectRatioFromSelection, selectedAspectRatio]
-  );
-
   const handleDelete = (id: string) => {
     setImages((prev) => {
       const imageToDelete = prev.find((img) => img.id === id);
@@ -715,80 +851,6 @@ export const ImageCropperApp: React.FC = () => {
       return prev.filter((img) => img.id !== id);
     });
   };
-
-  const handleFileInputClick = useCallback(() => {
-    fileInputRef.current?.click();
-  }, []);
-
-  const handlePageClick = useCallback(() => {
-    toast.closeAll();
-  }, [toast]);
-
-  const getSelectionFromAspectRatio = (
-    ratio: number,
-    originalDimensions: { width: number; height: number } | null
-  ): string => {
-    if (ratio === 1) {
-      return TEXT.MODAL.ASPECT_RATIOS.SQUARE.VALUE;
-    } else if (
-      originalDimensions &&
-      Math.abs(ratio - originalDimensions.width / originalDimensions.height) < 0.0001
-    ) {
-      return TEXT.MODAL.ASPECT_RATIOS.ORIGINAL.VALUE;
-    }
-    return TEXT.MODAL.ASPECT_RATIOS.FREE.VALUE;
-  };
-
-  const getFileExtension = (filename: string): string => {
-    return filename.slice(((filename.lastIndexOf('.') - 1) >>> 0) + 2).toLowerCase();
-  };
-
-  const formatNumber = (num: number): string => {
-    const rounded = Math.round(num);
-    return rounded === 0 ? '0' : rounded.toString();
-  };
-
-  const handleXChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      handleNumericChange('x', e.target.value);
-    },
-    [handleNumericChange]
-  );
-
-  const handleYChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      handleNumericChange('y', e.target.value);
-    },
-    [handleNumericChange]
-  );
-
-  const handleWidthChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      handleNumericChange('width', e.target.value);
-    },
-    [handleNumericChange]
-  );
-
-  const handleHeightChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      handleNumericChange('height', e.target.value);
-    },
-    [handleNumericChange]
-  );
-
-  const handleCropMemoryChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    setIsPerImageCrop(e.target.value === 'per-image');
-  }, []);
-
-  const handleCropEvent = useCallback(
-    (e: Cropper.CropEvent) => {
-      if (isClosing) {
-        return;
-      }
-      updateCropSettings(e.detail);
-    },
-    [updateCropSettings, isClosing]
-  );
 
   useEffect(() => {
     return () => {
@@ -957,6 +1019,7 @@ export const ImageCropperApp: React.FC = () => {
         onHeightChange={handleHeightChange}
         cropperRef={cropperRef}
         formatNumber={formatNumber}
+        onInputComplete={(key, value) => handleNumericChange(key, value, true)}
       />
     </Box>
   );

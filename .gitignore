@@ -46,7 +46,4 @@ yarn-debug.log*
 yarn-error.log*
 
 # backup files
-App_*.tsx
 /Backup/
-index_*.tsx
-theme.ts

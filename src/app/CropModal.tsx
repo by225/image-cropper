@@ -10,7 +10,7 @@ import Cropper, { ReactCropperElement } from 'react-cropper';
 import 'cropperjs/dist/cropper.css';
 import './cropper-custom.css';
 import { CropSettings, ImageData } from './types';
-import { TEXT } from './constants';
+import { TEXT, CROP_SIZE } from './constants';
 
 interface CropModalProps {
   isOpen: boolean;
@@ -22,7 +22,7 @@ interface CropModalProps {
   saveOnCancel: boolean;
   onCrop: () => Promise<void>;
   onCancel: () => void;
-  onCropEvent: (event: any) => void;
+  onCropEvent: (event: Cropper.CropEvent) => void;
   onCropperReady: () => void;
   onAspectChange: (event: React.ChangeEvent<HTMLSelectElement>) => void;
   onSaveOnCancelChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
@@ -30,6 +30,7 @@ interface CropModalProps {
   onYChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onWidthChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onHeightChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  onInputComplete: (key: keyof CropSettings, value: string) => void;
   cropperRef: React.RefObject<ReactCropperElement>;
   formatNumber: (value: number) => string;
 }
@@ -52,9 +53,34 @@ export const CropModal: React.FC<CropModalProps> = ({
   onYChange,
   onWidthChange,
   onHeightChange,
+  onInputComplete,
   cropperRef,
   formatNumber
 }) => {
+  const inputProps = (key: keyof CropSettings) => ({
+    size: 'sm' as const,
+    w: '70px',
+    h: '32px',
+    lineHeight: '32px',
+    type: 'number' as const,
+    onChange:
+      key === 'x'
+        ? onXChange
+        : key === 'y'
+          ? onYChange
+          : key === 'width'
+            ? onWidthChange
+            : onHeightChange,
+    onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') {
+        onInputComplete(key, e.currentTarget.value);
+      }
+    },
+    onBlur: (e: React.FocusEvent<HTMLInputElement>) => {
+      onInputComplete(key, e.target.value);
+    }
+  });
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} size="xl" isCentered>
       <ModalOverlay />
@@ -144,13 +170,14 @@ export const CropModal: React.FC<CropModalProps> = ({
                         X:
                       </FormLabel>
                       <Input
-                        size="sm"
-                        w="70px"
-                        h="32px"
-                        lineHeight="32px"
+                        {...inputProps('x')}
                         value={formatNumber(activeCropSettings.x)}
-                        onChange={onXChange}
-                        type="number"
+                        min={0}
+                        max={
+                          originalDimensions
+                            ? originalDimensions.width - activeCropSettings.width
+                            : CROP_SIZE.MAX - CROP_SIZE.MIN
+                        }
                       />
                     </FormControl>
                     <FormControl display="flex" alignItems="center" w="auto">
@@ -158,13 +185,14 @@ export const CropModal: React.FC<CropModalProps> = ({
                         Y:
                       </FormLabel>
                       <Input
-                        size="sm"
-                        w="70px"
-                        h="32px"
-                        lineHeight="32px"
+                        {...inputProps('y')}
                         value={formatNumber(activeCropSettings.y)}
-                        onChange={onYChange}
-                        type="number"
+                        min={0}
+                        max={
+                          originalDimensions
+                            ? originalDimensions.height - activeCropSettings.height
+                            : CROP_SIZE.MAX - CROP_SIZE.MIN
+                        }
                       />
                     </FormControl>
                   </HStack>
@@ -174,13 +202,14 @@ export const CropModal: React.FC<CropModalProps> = ({
                         Width:
                       </FormLabel>
                       <Input
-                        size="sm"
-                        w="70px"
-                        h="32px"
-                        lineHeight="32px"
+                        {...inputProps('width')}
                         value={formatNumber(activeCropSettings.width)}
-                        onChange={onWidthChange}
-                        type="number"
+                        min={CROP_SIZE.MIN}
+                        max={
+                          originalDimensions
+                            ? originalDimensions.width - activeCropSettings.x
+                            : CROP_SIZE.MAX
+                        }
                       />
                     </FormControl>
                     <FormControl display="flex" alignItems="center" w="auto">
@@ -188,13 +217,14 @@ export const CropModal: React.FC<CropModalProps> = ({
                         Height:
                       </FormLabel>
                       <Input
-                        size="sm"
-                        w="70px"
-                        h="32px"
-                        lineHeight="32px"
+                        {...inputProps('height')}
                         value={formatNumber(activeCropSettings.height)}
-                        onChange={onHeightChange}
-                        type="number"
+                        min={CROP_SIZE.MIN}
+                        max={
+                          originalDimensions
+                            ? originalDimensions.height - activeCropSettings.y
+                            : CROP_SIZE.MAX
+                        }
                       />
                     </FormControl>
                   </HStack>

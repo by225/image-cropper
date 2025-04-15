@@ -111,3 +111,8 @@ export const TIMING = {
 };
 
 export const MAX_FILE_SIZE = 10 * 1024 * 1024;
+
+export const CROP_SIZE = {
+  MIN: 16,
+  MAX: 16384
+};
