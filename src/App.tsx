@@ -553,12 +553,13 @@ export const ImageCropperApp: React.FC = () => {
     [images, toast, isProcessing, validateImage, existingFilenames, createToastMessage]
   );
 
-  const updateCropSettings = useCallback((data: Cropper.Data, aspectRatio: number) => {
+  const updateCropSettings = useCallback((data: Cropper.Data) => {
+    const aspectRatio = data.width / data.height;
     const newCropSettings: CropSettings = {
-      x: data.x,
-      y: data.y,
-      width: data.width,
-      height: data.height,
+      x: Math.round(data.x),
+      y: Math.round(data.y),
+      width: Math.round(data.width),
+      height: Math.round(data.height),
       aspectRatio
     };
     
@@ -738,17 +739,9 @@ export const ImageCropperApp: React.FC = () => {
       if (!cropper) return;
       
       const data = cropper.getData();
-      const aspectRatio = data.width / data.height;
-      
-      setActiveCropSettings({
-        x: Math.round(data.x),
-        y: Math.round(data.y),
-        width: Math.round(data.width),
-        height: Math.round(data.height),
-        aspectRatio
-      });
+      updateCropSettings(data);
     },
-    [isClosing]
+    [isClosing, updateCropSettings]
   );
 
   const inputProps = useCallback((key: keyof CropSettings) => ({
@@ -842,20 +835,11 @@ export const ImageCropperApp: React.FC = () => {
     if (initialCropSettings) {
       requestAnimationFrame(() => {
         cropper.setData(initialCropSettings);
-        
         const data = cropper.getData();
-        const aspectRatio = data.width / data.height;
-        
-        setActiveCropSettings({
-          x: Math.round(data.x),
-          y: Math.round(data.y),
-          width: Math.round(data.width),
-          height: Math.round(data.height),
-          aspectRatio
-        });
+        updateCropSettings(data);
       });
     }
-  }, [initialCropSettings, isClosing]);
+  }, [initialCropSettings, isClosing, updateCropSettings]);
 
   // Handles crop & save operation using modern File System API if available
   const handleCrop = async () => {
