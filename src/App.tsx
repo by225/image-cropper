@@ -553,17 +553,17 @@ export const ImageCropperApp: React.FC = () => {
     [images, toast, isProcessing, validateImage, existingFilenames, createToastMessage]
   );
 
-  const updateCropSettings = useCallback((data: Cropper.Data) => {
+  const updateCropSettings = useCallback((data: Cropper.Data, aspectRatio: number) => {
     const newCropSettings: CropSettings = {
       x: data.x,
       y: data.y,
       width: data.width,
       height: data.height,
-      aspectRatio: activeCropSettings.aspectRatio
+      aspectRatio
     };
-
+    
     setActiveCropSettings(newCropSettings);
-
+  
     if (isPerImageCrop && currentImage) {
       setImages((prev) =>
         prev.map((img) =>
@@ -575,7 +575,7 @@ export const ImageCropperApp: React.FC = () => {
     } else {
       setGlobalCropSettings(newCropSettings);
     }
-  }, [activeCropSettings.aspectRatio, currentImage, isPerImageCrop]);
+  }, [currentImage, isPerImageCrop]);
 
   const getAspectRatioFromSelection = useCallback((value: string): number => {
     switch (value) {
@@ -736,27 +736,14 @@ export const ImageCropperApp: React.FC = () => {
       if (isClosing) return;
       const cropper = cropperRef.current?.cropper;
       if (!cropper) return;
-      const rx = Math.round(e.detail.x);
-      const ry = Math.round(e.detail.y);
-      const rw = Math.round(e.detail.width);
-      const rh = Math.round(e.detail.height);
-      if (
-        activeCropSettings.x !== rx ||
-        activeCropSettings.y !== ry ||
-        activeCropSettings.width !== rw ||
-        activeCropSettings.height !== rh
-      ) {
-        setActiveCropSettings({
-          x: rx,
-          y: ry,
-          width: rw,
-          height: rh,
-          aspectRatio: activeCropSettings.aspectRatio
-        });
-      }
-      updateCropSettings(e.detail);
+      
+      // Calculate aspect ratio from the current dimensions
+      const currentData = cropper.getData();
+      const currentAspectRatio = currentData.width / currentData.height;
+      
+      updateCropSettings(e.detail, currentAspectRatio);
     },
-    [updateCropSettings, isClosing, activeCropSettings]
+    [updateCropSettings, isClosing]
   );
 
   const inputProps = useCallback((key: keyof CropSettings) => ({
@@ -1624,13 +1611,13 @@ export const ImageCropperApp: React.FC = () => {
                           X:
                         </FormLabel>
                         <Input
-                          {...inputProps('width')}
-                          value={formatNumber(activeCropSettings.width)}
-                          min={CROP_SIZE.MIN}
+                          {...inputProps('x')}
+                          value={formatNumber(activeCropSettings.x)}
+                          min={0}
                           max={
                             originalDimensions
-                              ? originalDimensions.width - activeCropSettings.x
-                              : CROP_SIZE.MAX
+                              ? originalDimensions.width - activeCropSettings.width
+                              : CROP_SIZE.MAX - CROP_SIZE.MIN
                           }
                         />
                       </FormControl>
