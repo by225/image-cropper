@@ -737,13 +737,18 @@ export const ImageCropperApp: React.FC = () => {
       const cropper = cropperRef.current?.cropper;
       if (!cropper) return;
       
-      // Calculate aspect ratio from the current dimensions
-      const currentData = cropper.getData();
-      const currentAspectRatio = currentData.width / currentData.height;
+      const data = cropper.getData();
+      const aspectRatio = data.width / data.height;
       
-      updateCropSettings(e.detail, currentAspectRatio);
+      setActiveCropSettings({
+        x: Math.round(data.x),
+        y: Math.round(data.y),
+        width: Math.round(data.width),
+        height: Math.round(data.height),
+        aspectRatio
+      });
     },
-    [updateCropSettings, isClosing]
+    [isClosing]
   );
 
   const inputProps = useCallback((key: keyof CropSettings) => ({
@@ -828,19 +833,29 @@ export const ImageCropperApp: React.FC = () => {
     img.src = image.url;
   };
 
-  const handleCropperReady = () => {
+  const handleCropperReady = useCallback(() => {
+    if (isClosing) return;
+    
     const cropper = cropperRef.current?.cropper;
-    if (cropper && currentImage && initialCropSettings) {
-      setTimeout(() => {
-        cropper.setData({
-          x: initialCropSettings.x,
-          y: initialCropSettings.y,
-          width: initialCropSettings.width,
-          height: initialCropSettings.height
+    if (!cropper) return;
+    
+    if (initialCropSettings) {
+      requestAnimationFrame(() => {
+        cropper.setData(initialCropSettings);
+        
+        const data = cropper.getData();
+        const aspectRatio = data.width / data.height;
+        
+        setActiveCropSettings({
+          x: Math.round(data.x),
+          y: Math.round(data.y),
+          width: Math.round(data.width),
+          height: Math.round(data.height),
+          aspectRatio
         });
-      }, 0);
+      });
     }
-  };
+  }, [initialCropSettings, isClosing]);
 
   // Handles crop & save operation using modern File System API if available
   const handleCrop = async () => {
@@ -1113,7 +1128,19 @@ export const ImageCropperApp: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (isOpen) {
+    if (!isOpen) {
+      setIsClosing(true);
+      const cropper = cropperRef.current?.cropper;
+      if (cropper) {
+        cropper.destroy();
+      }
+      setActiveCropSettings({
+        x: 0,
+        y: 0,
+        width: 0,
+        height: 0,
+        aspectRatio: 0
+      });
       setIsClosing(false);
     }
   }, [isOpen]);
@@ -1504,7 +1531,7 @@ export const ImageCropperApp: React.FC = () => {
                   src={currentImage.url}
                   style={{ height: 'min(50vh, 400px)', width: '100%' }}
                   initialAspectRatio={activeCropSettings.aspectRatio}
-                  data={activeCropSettings}
+                  data={initialCropSettings || activeCropSettings}  // Fallback to activeCropSettings if initialCropSettings is null
                   guides={true}
                   crop={handleCropEvent}
                   ready={handleCropperReady}
@@ -1514,6 +1541,7 @@ export const ImageCropperApp: React.FC = () => {
                   cropBoxMovable={true}
                   cropBoxResizable={true}
                   toggleDragModeOnDblclick={false}
+                  autoCropArea={1}
                 />
                 <VStack spacing={2} w="full">
                   <Flex
